@@ -1,2 +1,2 @@
-# CraftCMS-SproutForms-DynamicFormInclude
+# Craft CMS Sprout Forms Dynamic Form Include
 Lets you amend the markup for a sprout form a bit easier, also spits out all field types...
