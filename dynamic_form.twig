@@ -1,0 +1,330 @@
+{# 
+
+	Include a form like this in twig, passing the name of the form as a `var`: `{% include "_partials/dynamic_form" with {formName:"contactForm"} %}`
+	Result: Get a dynamic sprout forms form!
+	
+#}
+
+{% if craft.request.getParam('message') == 'thankyou' %}
+
+    <h1>Your message has been sent</h1>
+    <p>Thanks for getting in touch, a member of our team will get back to you as soon as they can!</p>
+    <br>
+    <a href="/" class="cta back" >Return Home</a></p>
+
+{% else %}
+
+    {# Prepare our error macro #}
+    {% macro errorList(errors) %}
+        {# To display errors, you want to make sure errors exist,
+             and then you can loop through and display them #}
+        {% if errors %}
+            <ul class="errors">
+                {% for error in errors %}
+                    <li>{{ error }}</li>
+                {% endfor %}
+            </ul>
+        {% endif %}
+    {% endmacro %}
+
+    {% from _self import errorList %}
+
+    {# define form name using name passed in include #}
+    {% set form = craft.sproutForms.form(formName) %}
+
+    {% set submittedEntry = craft.sproutForms.getEntry(form) %}
+
+    <form method="post" accept-charset="UTF-8" enctype="multipart/form-data" class="form validate ajax_snaptcha">
+        {{ getCsrfInput() }}
+        <input type="hidden" name="action" value="sproutForms/entries/saveEntry">
+        <input type="hidden" name="handle" value="{{ form.handle }}">
+        <input type="hidden" name="redirect" value="{{ craft.request.url }}?message=thankyou">
+
+        <div class="fields">
+
+            {% for tab in form.getFieldLayout().getTabs() %}
+
+              {% set fields = tab.getFields() %}
+
+              {% for field in fields %}
+
+                {% set required = field.required %}
+                {% set tabId = field.tabId %}
+
+                {% set field = field.getField() %}
+
+
+
+                {# TEXT INPUT OR TEXTAREA ELEMENT CHECK #}
+
+                {% if field.type == "PlainText" %}
+
+                    {% set textField = "" %}
+                    {% set textareaField = "" %}
+
+                    {# the only way to check if it's a textarea is if "multiline" = 1 #}
+                    {% for key,setting in field.settings %}
+                        {% if key == "multiline" and setting is empty %}
+                            {% set textField = field %}
+                        {% elseif key == "multiline" and setting is not empty %}
+                            {% set textareaField = field %}
+                        {% endif %}
+                    {% endfor %}
+
+
+
+
+                    {# text input #}
+
+                    {% if textField is defined and textField is not empty %}
+
+                        <div class="field">
+                            <label for="field-{{ textField.handle }}">{{ textField.name }} {% if required %} <abbr title="Required">*</abbr>{% endif %}</label>
+                            <input type="text" id="field-{{ textField.handle }}" name="fields[{{ textField.handle }}]" value="{{ attribute(submittedEntry, textField.handle) }}" {% if required %} class="required"{% endif %}>
+                            {% if submittedEntry is defined %}
+                                <div class="error">
+                                    {{ errorList(submittedEntry.getErrors(textField.handle)) }}
+                                </div>
+                            {% endif %}
+                        </div>
+
+                    {% endif %}
+
+
+
+                    {# textarea #}
+
+                    {% if textareaField is defined and textareaField is not empty %}
+
+                        <div class="field textarea-field full">
+
+                            <label for="field-{{ textareaField.handle }}">{{ textareaField.name }} {% if required %} <abbr title="Required">*</abbr>{% endif %}</label>
+
+                            <textarea rows="4" cols="50" name="fields[{{ textareaField.handle }}]" id="field-{{ textareaField.handle }}" {% if required %} class="required"{% endif %}>
+                                {{- attribute(submittedEntry, textareaField.handle) -}}
+                            </textarea>
+
+                            {% if submittedEntry is defined %}
+                                <div class="error">
+                                    {{ errorList(submittedEntry.getErrors(textareaField.handle)) }}
+                                </div>
+                            {% endif %}
+                        </div>
+
+                    {% endif %}
+
+
+
+                {# END OF TEXT INPUT OR TEXTAREA ELEMENT CHECK #}
+
+
+                {# dropdown select #}
+
+
+                {% elseif field.type == "Dropdown" %}
+
+                    {% set dropdownField = field %}
+
+                    {# We use the Twig attribute tag to dynamically access our
+                         field value on the submitted Form Entry #}
+                    {% set submittedDropdownValue = attribute(submittedEntry, dropdownField.handle) %}
+
+                    {% if dropdownField is defined %}
+
+                        <div class="field select-field">
+                            <label for="field-{{ dropdownField.handle }}">{{ dropdownField.name }} {% if required %} <abbr title="Required">*</abbr>{% endif %}</label>
+
+                            <div class="select">
+                                <select name="fields[{{ dropdownField.handle }}]" {% if required %} class="required"{% endif %}>
+                                    <option value="" disabled selected>Select...</option>
+                                    {% for option in dropdownField.settings.options %}
+
+                                        {% set defaultValue = option.default ? option.value : null %}
+                                        {% set selectedDropdownValue = submittedDropdownValue != '' ? submittedDropdownValue : defaultValue %}
+
+                                        <option value="{{ option.value }}" {% if selectedDropdownValue == option.value %}selected="selected"{% endif %}>{{ option.label }}</option>
+
+                                    {% endfor %}
+                                </select>
+                            </div>
+
+                            {% if submittedEntry is defined %}
+                                <div class="error">
+                                    {{ errorList(submittedEntry.getErrors(dropdownField.handle)) }}
+                                </div>
+                            {% endif %}
+                        </div>
+                    {% endif %}
+
+
+                {# multiselect #}
+
+
+                {% elseif field.type == "MultiSelect" %}
+
+                    {% set multiSelectField = field %}
+                    {% set multiSelectValues = attribute(submittedEntry, multiSelectField.handle) %}
+
+                    {% if multiSelectField is defined %}
+
+                        <div class="field multi-select-field">
+
+                            <label for="field-{{ multiSelectField.handle }}">{{ multiSelectField.name }} {% if required %} <abbr title="Required">*</abbr>{% endif %}</label>
+
+                            <select multiple="" name="field[{{ multiSelectField.handle }}][]" {% if required %} class="required"{% endif %}>
+
+                                {% for key, option in multiSelectField.settings.options %}
+
+                                    {% set defaultValue = (option.default and not submittedEntry.getErrors()|length) ? option.value : null %}
+                                    {% set submittedMultiSelect = multiSelectValues.options[key] %}
+                                    {% set selectedultiSelectValue = submittedMultiSelect.selected ? submittedMultiSelect.value : defaultValue %}
+
+                                    <option value="{{ option.value }}" {%- if selectedultiSelectValue == option.value %} selected="selected"{% endif -%}>{{ option.label }}</option>
+
+                                {% endfor %}
+
+                            </select>
+
+                            {% if submittedEntry is defined %}
+                                <div class="error">
+                                    {{ errorList(submittedEntry.getErrors(multiSelectField.handle)) }}
+                                </div>
+                            {% endif %}
+                        </div>
+
+                    {% endif %}
+
+
+
+                {# number field #}
+
+
+
+                {% elseif field.type == "Number" %}
+
+                    {% set numberField = field %}
+
+                    {% if numberField is defined %}
+
+                        <div class="field">
+                            <label for="field-{{ numberField.handle }}">{{ numberField.name }} {% if required %} <abbr title="Required">*</abbr>{% endif %}</label>
+                            <input type="number" id="field-{{ numberField.handle }}" name="fields[{{ numberField.handle }}]" value="{{ attribute(submittedEntry, numberField.handle) }}" {% if required %} class="required"{% endif %}>
+                            {% if submittedEntry is defined %}
+                                <div class="error">
+                                    {{ errorList(submittedEntry.getErrors(numberField.handle)) }}
+                                </div>
+                            {% endif %}
+                        </div>
+
+                    {% endif %}
+
+
+                {# radio buttons #}
+
+
+                {% elseif field.type == "RadioButtons" %}
+
+                    {% set radioButtonsField = field %}
+                    {% set submittedRadioValue = attribute(submittedEntry, radioButtonsField.handle) %}
+
+                    {% if radioButtonsField is defined %}
+
+                        <div class="field radios-field">
+                            <label>{{ radioButtonsField.name }} {% if required %} <abbr title="Required">*</abbr>{% endif %}</label>
+                            {% for option in radioButtonsField.settings.options %}
+
+                                {% set defaultValue = option.default ? option.value : null %}
+                                {% set selectedRadioValue = submittedRadioValue != '' ? submittedRadioValue : defaultValue %}
+
+                                <label>
+                                    <input type="radio" value="{{ option.value }}" name="fields[{{ radioButtonsField.handle }}]" {%- if selectedRadioValue == option.value %} checked="checked"{% endif -%} {% if required %} class="required"{% endif %}> {{ option.label }}
+                                </label>
+                            {% endfor %}
+
+                            {% if submittedEntry is defined %}
+                                <div class="error">
+                                    {{ errorList(submittedEntry.getErrors(radioButtonsField.handle)) }}
+                                </div>
+                            {% endif %}
+                        </div>
+
+                    {% endif %}
+
+
+
+                {# checkboxes #}
+
+
+
+                {% elseif field.type == "Checkboxes" %}
+
+                    {% set checkboxesField = field %}
+                    {% set submittedCheckboxValues = attribute(submittedEntry, checkboxesField.handle) %}
+
+                    {% if checkboxesField is defined %}
+
+                        <div class="field checkboxes-field">
+                            <label>{{ checkboxesField.name }} {% if required %} <abbr title="Required">*</abbr>{% endif %}</label>
+                            {% for key, option in checkboxesField.settings.options %}
+
+                                {% set defaultValue = (option.default and not submittedEntry.getErrors()|length) ? option.value : null %}
+                                {% set submittedCheckbox = submittedCheckboxValues.options[key] %}
+                                {% set selectedCheckboxValue = submittedCheckbox.selected ? submittedCheckbox.value : defaultValue %}
+
+                                <label>
+                                    <input type="checkbox" value="{{ option.value }}" name="fields[{{ checkboxesField.handle }}][]" {%- if selectedCheckboxValue == option.value %} checked="checked"{% endif -%} {% if required %} class="required"{% endif %}>&nbsp;{{ option.label }}
+                                </label>
+
+                            {% endfor %}
+
+                            {% if submittedEntry is defined %}
+                                <div class="error">
+                                    {{ errorList(submittedEntry.getErrors(checkboxesField.handle)) }}
+                                </div>
+                            {% endif %}
+                        </div>
+
+                    {% endif %}
+
+
+
+                {# file input #}
+
+
+
+                {% elseif field.type == "Assets" %}
+
+                    {% set assetsField = field %}
+
+                    {% if assetsField is defined %}
+
+                        <div class="field">
+                            <label for="field-{{ assetsField.handle }}">{{ assetsField.name }} {% if required %} <abbr title="Required">*</abbr>{% endif %}</label>
+                            <input type="file" id="field-{{ assetsField.handle }}" name="fields[{{ assetsField.handle }}]" value="" {% if required %} class="required"{% endif %}>
+                            {% if submittedEntry is defined %}
+                                <div class="error">
+                                    {{ errorList(submittedEntry.getErrors(assetsField.handle)) }}
+                                </div>
+                            {% endif %}
+                        </div>
+
+                    {% endif %}
+
+
+
+
+                {% endif %}
+                {# END IF OF ALL THE INPUTS #}
+
+              {% endfor %}{# for field in fields #}
+
+            {% endfor %}{# for tab in form.getFieldLayout().getTabs() #}
+
+        </div>
+
+        <div class="cta_wrapper">
+            <button type="submit">Send Message</button>
+        </div>
+
+    </form>
+{% endif %}
